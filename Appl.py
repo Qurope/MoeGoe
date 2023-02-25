@@ -8,6 +8,7 @@ import sys
 import re
 from torch import no_grad, LongTensor
 import logging
+from tqdm import tqdm
 
 logging.getLogger('numba').setLevel(logging.WARNING)
 
@@ -78,14 +79,22 @@ def get_label(text, label):
         return False, text
 
 
-if __name__ == '__main__':
+# configs:
+model_path = 'model/G_63000.pth'
+config_path = 'model/config.json'
+save_path = 'outputs/'
+
+mode_choice = 't'
+
+
+def run(): # text, save_name
     if '--escape' in sys.argv:
         escape = True
     else:
         escape = False
 
-    model = input('Path of a VITS model: ')
-    config = input('Path of a config file: ')
+    model = model_path  # input('Path of a VITS model: ')
+    config = config_path  # input('Path of a config file: ')
 
     # 处理config,json
     hps_ms = utils.get_hparams_from_file(config)
@@ -114,7 +123,7 @@ if __name__ == '__main__':
 
         originnal_id = get_speaker_id('Original speaker ID: ')
         target_id = get_speaker_id('Target speaker ID: ')
-        out_path = input('Path to save: ')
+        out_path = save_path + save_name  # input('Path to save: ')
 
         y = audio.unsqueeze(0)
 
@@ -131,17 +140,25 @@ if __name__ == '__main__':
         return audio, out_path
 
     if n_symbols != 0:
+        # text 2 speech:
         if not emotion_embedding:
-            while True:
-                choice = input('TTS or VC? (t/v):')
+            #while True:
+            #if True:
+            file = open('inputs/texts.txt', 'r', encoding='utf-8')
+            i = 0
+            for text in tqdm(file.readlines()):
+                i += 1
+                save_name = f'output{i}.wav'
+
+                choice = mode_choice  # input('TTS or VC? (t/v):')
                 if choice == 't':
-                    text = input('Text to read: ')
+                    text = text  # input('Text to read: ')
                     if text == '[ADVANCED]':
                         text = input('Raw text:')
                         print('Cleaned text is:')
                         ex_print(_clean_text(
                             text, hps_ms.data.text_cleaners), escape)
-                        continue
+                        # continue
 
                     length_scale, text = get_label_value(
                         text, 'LENGTH', 1, 'length scale')
@@ -153,23 +170,26 @@ if __name__ == '__main__':
 
                     stn_tst = get_text(text, hps_ms, cleaned=cleaned)
 
-                    print_speakers(speakers, escape)
-                    speaker_id = get_speaker_id('Speaker ID: ')
-                    out_path = input('Path to save: ')
+                    # print_speakers(speakers, escape)
+                    speaker_id = 0  # get_speaker_id('Speaker ID: ')
+                    out_path = save_path + save_name  # input('Path to save: ')
 
                     with no_grad():
                         x_tst = stn_tst.unsqueeze(0)
                         x_tst_lengths = LongTensor([stn_tst.size(0)])
                         sid = LongTensor([speaker_id])
                         audio = net_g_ms.infer(x_tst, x_tst_lengths, sid=sid, noise_scale=noise_scale,
-                                               noise_scale_w=noise_scale_w, length_scale=length_scale)[0][0, 0].data.cpu().float().numpy()
+                                               noise_scale_w=noise_scale_w,
+                                               length_scale=length_scale)[0][0, 0].data.cpu().float().numpy()
 
                 elif choice == 'v':
                     audio, out_path = voice_conversion()
 
                 write(out_path, hps_ms.data.sampling_rate, audio)
-                print('Successfully saved!')
-                ask_if_continue()
+            file.close()
+                # print('Successfully saved!')
+                # ask_if_continue()
+        # W2V2-VITS:
         else:
             import os
             import librosa
@@ -231,6 +251,7 @@ if __name__ == '__main__':
                 write(out_path, hps_ms.data.sampling_rate, audio)
                 print('Successfully saved!')
                 ask_if_continue()
+    # HuBERT-VITS
     else:
         model = input('Path of a hubert-soft model: ')
         from hubert_model import hubert_soft
@@ -291,3 +312,13 @@ if __name__ == '__main__':
             write(out_path, hps_ms.data.sampling_rate, audio)
             print('Successfully saved!')
             ask_if_continue()
+
+
+if __name__ == '__main__':
+    # file = open('inputs/texts.txt', 'r', encoding='utf-8')
+    # i = 0
+    # for text in tqdm(file.readlines()):
+    #     i += 1
+    #     run(text, f'output{i}.wav')
+    # file.close()
+    run()
